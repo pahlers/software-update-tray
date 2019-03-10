@@ -1,0 +1,191 @@
+#!/usr/bin/env python
+# coding=utf-8
+#
+#
+#
+# software-update-tray
+# This program will check for updates every two hours and show these updates by notification.
+#
+# Author: Peter Ahlers <peter.ahlers@gmail.com>
+#
+# Know what you are doing and prepare the use of this program by the following steps
+#
+# 1) Run the following command.
+# """bash
+# apt install python-appindicator python-apscheduler python-notify2
+#   python-concurrent.futures python-funcsigs python-gtk2
+# """
+# 2) Add the content of sudo-software-update-tray to "/etc/sudoers.d". I would like to get the update list without sudo,
+#    but that seems impossible. This solution is to be able to run software-update-tray-get-updates without password.
+# 3) Copy the software-update-tray and software-update-tray-get-updates to a place where you can run it.
+# 4) Add "software-update-tray" to your startup script
+#
+# The following source by Neil Jagdish Patel <neil.patel@canonical.com> and Jono Bacon <jono@ubuntu.com> is used as an
+# inspiration.
+#
+# https://wiki.ubuntu.com/DesktopExperienceTeam/ApplicationIndicators#PyGTK
+#
+#
+#
+# This program is free software: you can redistribute it and/or modify it
+# under the terms of either or both of the following licenses:
+#
+# 1) the GNU Lesser General Public License version 3, as published by the
+# Free Software Foundation; and/or
+# 2) the GNU Lesser General Public License version 2.1, as published by
+# the Free Software Foundation.
+#
+# This program is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranties of
+# MERCHANTABILITY, SATISFACTORY QUALITY or FITNESS FOR A PARTICULAR
+# PURPOSE.  See the applicable version of the GNU Lesser General Public
+# License for more details.
+#
+# You should have received a copy of both the GNU Lesser General Public
+# License version 3 and version 2.1 along with this program.  If not, see
+# <http://www.gnu.org/licenses/>
+
+import appindicator
+import gobject
+import gtk
+import logging
+import notify2
+import os
+import re
+import subprocess
+from apscheduler.schedulers.background import BackgroundScheduler
+
+APPINDICATOR_ID = "software-update-tray"
+ICON = "/usr/share/icons/gnome/16x16/apps/system-software-install.png"
+ICON_UPDATE_AVAILABLE = "/usr/share/icons/gnome/48x48/status/software-update-available.png"
+ICON_ERROR = "/usr/share/icons/gnome/48x48/status/dialog-error.png"
+GET_UPDATE_COMMAND = "sudo {}/software-update-tray-get-updates".format(os.path.dirname(os.path.abspath(__file__)))
+
+
+def menuitem_update_request(menu_item):
+    """
+    Method used by the menu to request an update
+
+    :param menu_item: GtkMenuItem, unused but needed
+    :return:
+    """
+    show_updates(check_updates())
+
+
+def show_updates(updates, timeout=5000):
+    """
+    Method to show the updates in a notification
+
+    :param updates: List with updates. An update is a tuple with first the package name, then old version number and
+    at last the new version number
+    :param timeout: timeout of the notification. After the timeout the notification closes. Default of 5000ms
+    :return:
+    """
+    print("show_updates timeout {} (0 = EXPIRES_NEVER)".format(timeout))
+
+    update_text = ""
+    update_label_text = "{} updates".format(len(updates))
+
+    for update in updates:
+        [package_name, old_version_number, new_version_number] = update
+        update_text += "{} {} → {}\n".format(package_name, old_version_number, new_version_number)
+
+    menuitem_item_updates.set_label(update_label_text)
+
+    notification = notify2.Notification(update_label_text, update_text, ICON_UPDATE_AVAILABLE)
+    notification.set_timeout(timeout)
+    notification.show()
+
+
+def menuitem_response_quit(menu_item):
+    """
+    Method used by the menu to request closing this application
+
+    :param menu_item: GtkMenuItem, unused but needed
+    :return:
+    """
+    print("quit")
+
+    scheduler.shutdown()
+    gtk.main_quit()
+
+
+def check_updates():
+    """
+    Method to request an apt update, get a list of the updates and process the list of updates. It will return the
+    list of updates.
+
+    :return: List with updates. An update is a tuple with first the package name, then old version number and
+    at last the new version number
+    """
+    print("check_updates")
+
+    process = subprocess.Popen(GET_UPDATE_COMMAND.split(), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    output, error = process.communicate()
+
+    if error == "":
+        # lines = re.findall(r'^Inst\s(.*)\s\[(.*)]')
+        updates = []
+
+        for line in output.split('\n'):
+            # Match example  "Inst teamviewer [13.2.13582] (14.1.18533 TeamViewer:stable [amd64])"
+            update = re.findall(r'^Inst\s(.*)\s\[(.*)]\s\((.*)\s.*\s\[.*]\)$', line)
+
+            if update:
+                updates.append(update[0])
+
+        return updates
+
+    else:
+        notify2.Notification("Error", "Can't get update list. Check log of software-update-tray", ICON_ERROR).show()
+
+
+if __name__ == "__main__":
+    # set logging
+    log = logging.getLogger('apscheduler')
+    log.setLevel(logging.WARNING)
+
+    fmt = logging.Formatter('%(levelname)s:%(name)s:%(message)s')
+    h = logging.StreamHandler()
+    h.setFormatter(fmt)
+    log.addHandler(h)
+
+    # set scheduler
+    scheduler = BackgroundScheduler()
+    scheduler.add_job(lambda: show_updates(check_updates(), notify2.EXPIRES_NEVER), "interval", hours=2)
+    scheduler.start()
+    scheduler.print_jobs()
+
+    # set notify
+    notify2.init('software-update-tray')
+
+    # set menu
+    menu = gtk.Menu()
+
+    # set item updates
+    menuitem_item_updates = gtk.MenuItem("0 updates")
+    menuitem_item_updates.connect("activate", menuitem_update_request)
+    menu.append(menuitem_item_updates)
+
+    # set item quit
+    menu_item_quit = gtk.MenuItem("Quit")
+    menu_item_quit.connect("activate", menuitem_response_quit)
+    menu.append(menu_item_quit)
+
+    menu.show_all()
+
+    # set systemtray
+    indicator = appindicator.Indicator(APPINDICATOR_ID,
+                                       os.path.abspath(ICON),
+                                       appindicator.CATEGORY_SYSTEM_SERVICES)
+    indicator.set_status(appindicator.STATUS_ACTIVE)
+    indicator.set_menu(menu)
+
+    # start program
+    gobject.threads_init()
+
+    updatesByStartup = check_updates()
+    if updatesByStartup:
+        show_updates(updatesByStartup)
+
+    gtk.main()
