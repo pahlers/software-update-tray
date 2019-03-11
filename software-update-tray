@@ -84,7 +84,8 @@ def show_updates(updates, timeout=5000):
     print("show_updates timeout {} (0 = EXPIRES_NEVER)".format(timeout))
 
     update_text = ""
-    update_label_text = "{} updates".format(len(updates))
+    amoundUpdates = len(updates)
+    update_label_text = "{} updates".format(amoundUpdates)
 
     for update in updates:
         [package_name, old_version_number, new_version_number] = update
@@ -93,7 +94,8 @@ def show_updates(updates, timeout=5000):
     menuitem_item_updates.set_label(update_label_text)
 
     notification = notify2.Notification(update_label_text, update_text, ICON_UPDATE_AVAILABLE)
-    notification.set_timeout(timeout)
+    if amoundUpdates:
+        notification.set_timeout(timeout)
     notification.show()
 
 

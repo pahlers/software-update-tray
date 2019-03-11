@@ -1,1 +1,3 @@
-%sudo   ALL=NOPASSWD:software-update-tray-get-updates
+# Change path to the path of installation
+
+%sudo   ALL=NOPASSWD:/usr/local/bin/software-update-tray-get-updates
