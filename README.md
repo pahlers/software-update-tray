@@ -7,10 +7,9 @@ Author: Peter Ahlers
 Know what you are doing and prepare the use of this program by the following steps
 
 1) Run the following command.
-"""bash
-apt install python-appindicator python-apscheduler python-notify2
-  python-concurrent.futures python-funcsigs python-gtk2
-"""
+```bash
+apt install python-appindicator python-apscheduler python-notify2 python-concurrent.futures python-funcsigs python-gtk2
+```
 2) Add the content of sudo-software-update-tray to "/etc/sudoers.d". I would like to get the update list without sudo,
    but that seems impossible. This solution is to be able to run software-update-tray-get-updates without password.
 3) Copy the software-update-tray and software-update-tray-get-updates to a place where you can run it.
